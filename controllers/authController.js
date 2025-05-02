@@ -28,7 +28,7 @@ exports.login = async (req, res) => {
   res.cookie('refreshToken', refreshToken, {
       httpOnly: true,
       sameSite: 'strict',
-      // path: '/api/auth/refresh',
+      path: '/',
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
     }).json({ accessToken,
         user: {
@@ -43,16 +43,35 @@ exports.profile = async (req, res) => {
   res.json(user);
 };
 
-exports.refresh = async (req, res) => {
+exports.refresh = async (req, res) => { // Token lấy đang bị sai, cần fix lại
   const token = req.cookies.refreshToken;
-  if (!token) return res.sendStatus(401);
-  const user = await User.findOne({ refreshToken: token });
-  if (!user) return res.sendStatus(403);
+  // console.log('Refresh token:', token);
+
+  if (!token) return res.sendStatus(401); // Unauthorized if no token
+
   try {
-    jwt.verify(token, process.env.JWT_REFRESH_SECRET);
+    // Verify the token
+    const payload = jwt.verify(token, process.env.JWT_REFRESH_SECRET);
+    
+    // Check for user existence and matching refresh token
+    const user = await User.findOne({ _id: payload.userId, refreshToken: token }); //, refreshToken: token
+    // console.log('User found:', user);
+    if (!user) return res.sendStatus(403); // Forbidden if no user found
+
+    // Generate a new access token
     const newAccessToken = generateToken(user._id, process.env.JWT_SECRET, '15m');
-    res.json({ accessToken: newAccessToken });
-  } catch {
-    res.sendStatus(403);
+
+    // Send the new token and user details
+    res.json({
+      accessToken: newAccessToken,
+      user: {
+        username: user.username,
+        // Add other fields as needed
+      },
+    });
+  } catch (err) {
+    console.error('Error verifying refresh token:', err);
+    res.sendStatus(403); // Forbidden if token verification fails
   }
 };
+

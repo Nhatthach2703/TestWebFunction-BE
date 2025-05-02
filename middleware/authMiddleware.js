@@ -1,14 +1,19 @@
 const jwt = require('jsonwebtoken');
 
 module.exports = (req, res, next) => {
-  const auth = req.headers.authorization;
-  if (!auth) return res.sendStatus(401);
+  const authHeader = req.headers.authorization;
+
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ message: 'No token provided' });
+  }
+
+  const token = authHeader.split(' ')[1];
+
   try {
-    const token = auth.split(' ')[1];
     const payload = jwt.verify(token, process.env.JWT_SECRET);
-    req.userId = payload.userId;
+    req.userId = payload.userId; // hoặc payload._id tùy bạn encode sao
     next();
-  } catch {
-    res.sendStatus(403);
+  } catch (err) {
+    return res.status(403).json({ message: 'Invalid or expired token' });
   }
 };
