@@ -43,25 +43,33 @@ exports.profile = async (req, res) => {
   res.json(user);
 };
 
-exports.refresh = async (req, res) => { // Token lấy đang bị sai, cần fix lại
+exports.refresh = async (req, res) => {
   const token = req.cookies.refreshToken;
   // console.log('Refresh token:', token);
 
-  if (!token) return res.sendStatus(401); // Unauthorized if no token
+  if (!token) {
+    console.error('No refresh token provided');
+    return res.status(401).json({ message: 'No refresh token provided' }); // Unauthorized
+  }
 
   try {
-    // Verify the token
+    // Verify the refresh token 
     const payload = jwt.verify(token, process.env.JWT_REFRESH_SECRET);
-    
-    // Check for user existence and matching refresh token
-    const user = await User.findOne({ _id: payload.userId, refreshToken: token }); //, refreshToken: token
-    // console.log('User found:', user);
-    if (!user) return res.sendStatus(403); // Forbidden if no user found
+
+    // Check if the user exists and the refresh token matches
+    const user = await User.findOne({ _id: payload.userId, refreshToken: token });
+    if (!user) {
+      console.error('User not found or refresh token does not match', {
+        userId: payload.userId,
+        token,
+      });
+      return res.status(403).json({ message: 'Invalid or expired refresh token' }); // Forbidden
+    }
 
     // Generate a new access token
     const newAccessToken = generateToken(user._id, process.env.JWT_SECRET, '15m');
 
-    // Send the new token and user details
+    // Send the new access token and user details
     res.json({
       accessToken: newAccessToken,
       user: {
@@ -70,8 +78,34 @@ exports.refresh = async (req, res) => { // Token lấy đang bị sai, cần fix
       },
     });
   } catch (err) {
-    console.error('Error verifying refresh token:', err);
-    res.sendStatus(403); // Forbidden if token verification fails
+    console.error('Error verifying refresh token:', {
+      message: err.message,
+      stack: err.stack,
+      token,
+    });
+    res.status(403).json({ message: 'Invalid or expired refresh token' }); // Forbidden
+  }
+};
+
+exports.logout = async (req, res) => {
+  try {
+    // The userId is already decoded and available in req.userId from the auth middleware
+    const user = await User.findById(req.userId);
+    if (!user) return res.sendStatus(403); // Forbidden if no user found
+
+    user.refreshToken = null; // Clear the refresh token
+    await user.save();
+
+    res.clearCookie('refreshToken', {
+      httpOnly: true,
+      sameSite: 'strict',
+    }).sendStatus(204); // No content
+  } catch (err) {
+    console.error('Error during logout:', {
+      message: err.message,
+      stack: err.stack,
+    });
+    res.status(500).json({ error: 'Internal server error', details: err.message }); // Internal server error with details
   }
 };
 

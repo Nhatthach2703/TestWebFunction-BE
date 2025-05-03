@@ -6,11 +6,13 @@ const {
   login,
   profile,
   refresh,
+  logout,
 } = require('../controllers/authController');
 
 router.post('/register', register);
 router.post('/login', login);
 router.get('/profile', auth, profile);
 router.post('/refresh', refresh);
+router.post('/logout', auth, logout)
 
 module.exports = router;
